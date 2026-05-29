@@ -1,0 +1,6 @@
+@Frames3_HostAddress = http://localhost:5185
+
+GET {{Frames3_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###

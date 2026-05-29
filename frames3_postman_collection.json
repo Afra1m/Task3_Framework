@@ -1,0 +1,239 @@
+{
+	"info": {
+		"_postman_id": "f3a4b2c1-1234-5678-9abc-def012345678",
+		"name": "Task3_Framework_Tests",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"variable": [
+		{
+			"key": "baseUrl",
+			"value": "https://localhost:5001"
+		},
+		{
+			"key": "trustedOrigin",
+			"value": "https://example.com"
+		},
+		{
+			"key": "untrustedOrigin",
+			"value": "https://evil.com"
+		}
+	],
+	"item": [
+		{
+			"name": "Security Headers",
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"pm.test('Status 200', () => pm.response.to.have.status(200));",
+							"pm.test('X-Content-Type-Options header', () => {",
+							"    pm.response.to.have.header('X-Content-Type-Options', 'nosniff');",
+							"});",
+							"pm.test('X-Frame-Options header', () => {",
+							"    pm.response.to.have.header('X-Frame-Options', 'DENY');",
+							"});"
+						]
+					}
+				}
+			],
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "{{baseUrl}}/api/items",
+					"host": ["{{baseUrl}}"],
+					"path": ["api", "items"]
+				}
+			}
+		},
+		{
+			"name": "CORS - Trusted Origin",
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"pm.test('Status 200', () => pm.response.to.have.status(200));",
+							"pm.test('Access-Control-Allow-Origin matches trusted origin', () => {",
+							"    const header = pm.response.headers.get('Access-Control-Allow-Origin');",
+							"    pm.expect(header).to.include(pm.environment.get('trustedOrigin'));",
+							"});"
+						]
+					}
+				}
+			],
+			"request": {
+				"method": "GET",
+				"header": [
+					{
+						"key": "Origin",
+						"value": "{{trustedOrigin}}"
+					}
+				],
+				"url": {
+					"raw": "{{baseUrl}}/api/items",
+					"host": ["{{baseUrl}}"],
+					"path": ["api", "items"]
+				}
+			}
+		},
+		{
+			"name": "CORS - Untrusted Origin",
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"pm.test('Status 200 but no CORS header for untrusted origin', () => {",
+							"    pm.response.to.have.status(200);",
+							"    const corsHeader = pm.response.headers.get('Access-Control-Allow-Origin');",
+							"    pm.expect(corsHeader).to.be.undefined;",
+							"});"
+						]
+					}
+				}
+			],
+			"request": {
+				"method": "GET",
+				"header": [
+					{
+						"key": "Origin",
+						"value": "{{untrustedOrigin}}"
+					}
+				],
+				"url": {
+					"raw": "{{baseUrl}}/api/items",
+					"host": ["{{baseUrl}}"],
+					"path": ["api", "items"]
+				}
+			}
+		},
+		{
+			"name": "Rate Limit - Read (GET)",
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"const limit = 30;",
+							"let requestCount = pm.environment.get('readRequestCount') || 0;",
+							"requestCount++;",
+							"pm.environment.set('readRequestCount', requestCount);",
+							"if (requestCount > limit) {",
+							"    pm.test('Rate limit exceeded - status 429', () => {",
+							"        pm.response.to.have.status(429);",
+							"        pm.expect(pm.response.headers.has('Retry-After')).to.be.true;",
+							"    });",
+							"} else {",
+							"    pm.test('Under limit - status 200', () => {",
+							"        pm.response.to.have.status(200);",
+							"    });",
+							"}"
+						]
+					}
+				}
+			],
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "{{baseUrl}}/api/items",
+					"host": ["{{baseUrl}}"],
+					"path": ["api", "items"]
+				}
+			}
+		},
+		{
+			"name": "Rate Limit - Write (POST)",
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"const limit = 5;",
+							"let requestCount = pm.environment.get('writeRequestCount') || 0;",
+							"requestCount++;",
+							"pm.environment.set('writeRequestCount', requestCount);",
+							"if (requestCount > limit) {",
+							"    pm.test('Rate limit exceeded - status 429', () => {",
+							"        pm.response.to.have.status(429);",
+							"        pm.expect(pm.response.headers.has('Retry-After')).to.be.true;",
+							"    });",
+							"} else {",
+							"    pm.test('Under limit - status 201', () => {",
+							"        pm.response.to.have.status(201);",
+							"    });",
+							"}"
+						]
+					}
+				}
+			],
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "\"test-item\""
+				},
+				"url": {
+					"raw": "{{baseUrl}}/api/items",
+					"host": ["{{baseUrl}}"],
+					"path": ["api", "items"]
+				}
+			}
+		},
+		{
+			"name": "Mode verification (Dev/Prod)",
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"pm.test('Status 429 on repeated call', () => {",
+							"    pm.response.to.have.status(429);",
+							"});",
+							"// If Development mode, response body contains readable message.",
+							"// Production mode should not include a long text, but Retry-After header is set.",
+							"const body = pm.response.text();",
+							"const mode = pm.environment.get('appMode'); // set manually or omit",
+							"if (mode === 'Development') {",
+							"    pm.test('Development mode: body has explanation', () => {",
+							"        pm.expect(body).to.include('Слишком много запросов');",
+							"    });",
+							"} else {",
+							"    pm.test('Production mode: minimal body or Retry-After only', () => {",
+							"        pm.expect(body).to.be.empty;",
+							"        pm.expect(pm.response.headers.has('Retry-After')).to.be.true;",
+							"    });",
+							"}"
+						]
+					}
+				}
+			],
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "\"trigger-rate-limit\""
+				},
+				"url": {
+					"raw": "{{baseUrl}}/api/items",
+					"host": ["{{baseUrl}}"],
+					"path": ["api", "items"]
+				}
+			}
+		}
+	]
+}
